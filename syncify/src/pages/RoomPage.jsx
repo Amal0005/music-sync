@@ -1,12 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import {
-  Music, Users, MessageSquare, ListMusic,
-  Copy, Check, LogOut, Crown, Loader2,
-} from 'lucide-react';
+import { Music2, Users, MessageSquare, ListMusic, Copy, Check, LogOut, Crown, Loader2 } from 'lucide-react';
 import { useRoom } from '../hooks/useRoom';
 import { buildInviteLink } from '../utils/roomUtils';
-import { useSilentAudio } from '../hooks/useSilentAudio';
 import YouTubePlayer from '../components/YouTubePlayer';
 import SearchPanel from '../components/SearchPanel';
 import Playlist from '../components/Playlist';
@@ -16,17 +12,11 @@ import ChatPanel from '../components/ChatPanel';
 const YOUTUBE_API_KEY = import.meta.env.VITE_YOUTUBE_API_KEY || '';
 
 const TABS = ['search', 'playlist', 'participants', 'chat'];
-const TAB_ICONS = {
-  playlist:     <ListMusic size={16} />,
-  search:       <Music size={16} />,
-  participants: <Users size={16} />,
-  chat:         <MessageSquare size={16} />,
-};
-const TAB_LABELS = {
-  playlist:     'Queue',
-  search:       'Search',
-  participants: 'People',
-  chat:         'Chat',
+const TAB_META = {
+  search:       { icon: <Music2 size={15} />,       label: 'Search'  },
+  playlist:     { icon: <ListMusic size={15} />,    label: 'Queue'   },
+  participants: { icon: <Users size={15} />,        label: 'People'  },
+  chat:         { icon: <MessageSquare size={15} />, label: 'Chat'   },
 };
 
 export default function RoomPage() {
@@ -41,24 +31,15 @@ export default function RoomPage() {
   const userId   = userInfo?.userId;
   const username = userInfo?.username;
 
-  // Keep a silent <audio> looping so the browser treats this tab as
-  // having active audio — prevents it from suspending the YouTube iframe
-  // when the window is minimised or the tab is switched.
-  useSilentAudio(!!userInfo);
-
-  const {
-    roomData, participants, playlist, messages,
-    playbackState, loading, error,
-    addToPlaylist, removeFromPlaylist, updatePlayback, sendMessage,
-  } = useRoom(roomCode, userId, username);
+  const { roomData, participants, playlist, messages, playbackState, loading, error,
+    addToPlaylist, removeFromPlaylist, updatePlayback, sendMessage } = useRoom(roomCode, userId, username);
 
   const isOwner = roomData?.ownerUserId === userId;
 
-  const [currentSong, setCurrentSong]   = useState(null);
-  const [activeTab, setActiveTab]       = useState('search');
-  const [copied, setCopied]             = useState(false);
-  // Mobile: whether the bottom panel is expanded
-  const [panelOpen, setPanelOpen]       = useState(true);
+  const [currentSong, setCurrentSong] = useState(null);
+  const [activeTab, setActiveTab]     = useState('search');
+  const [copied, setCopied]           = useState(false);
+  const [panelOpen, setPanelOpen]     = useState(true);
 
   useEffect(() => {
     if (isOwner || !playbackState?.videoId) return;
@@ -78,7 +59,7 @@ export default function RoomPage() {
   const handleSelectSong = useCallback((song) => {
     if (!isOwner) return;
     setCurrentSong(song);
-    updatePlayback({ videoId: song.videoId, isPlaying: true, currentTime: 0 });
+    updatePlayback({ videoId: song.videoId, isPlaying: true, currentTime: 0, playStartedAt: Date.now() });
   }, [isOwner, updatePlayback]);
 
   const handleEnded = useCallback((direction = 'next') => {
@@ -102,217 +83,185 @@ export default function RoomPage() {
 
   function copyInvite() {
     navigator.clipboard.writeText(buildInviteLink(roomCode));
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopied(true); setTimeout(() => setCopied(false), 2000);
   }
 
   if (!userInfo) return null;
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <Loader2 size={32} className="animate-spin text-purple-500" />
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="min-h-screen bg-[#080b14] flex items-center justify-center">
+      <Loader2 size={28} className="animate-spin text-cyan-500" />
+    </div>
+  );
 
-  if (error) {
-    return (
-      <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center gap-4 text-white/60 p-4">
-        <Music size={40} className="text-purple-700" />
-        <p className="text-center">{error}</p>
-        <button onClick={() => navigate('/')} className="px-6 py-3 bg-purple-600 rounded-xl hover:bg-purple-500 text-white">
-          Back to Home
-        </button>
-      </div>
-    );
-  }
+  if (error) return (
+    <div className="min-h-screen bg-[#080b14] flex flex-col items-center justify-center gap-4 text-white/40 p-4">
+      <Music2 size={36} className="text-cyan-900" />
+      <p className="text-center text-sm">{error}</p>
+      <button onClick={() => navigate('/')} className="px-6 py-3 gradient-btn rounded-2xl text-sm font-medium">
+        Back to Home
+      </button>
+    </div>
+  );
 
   const SidebarContent = (
     <>
       {/* Tabs */}
-      <div className="flex border-b border-white/5 shrink-0">
+      <div className="flex shrink-0 border-b border-white/5">
         {TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`flex-1 flex flex-col items-center gap-1 py-2.5 text-xs transition-colors ${
+          <button key={tab} onClick={() => setActiveTab(tab)}
+            className={`flex-1 flex flex-col items-center gap-1 py-3 text-[10px] font-medium transition-all ${
               activeTab === tab
-                ? 'text-purple-400 border-b-2 border-purple-500'
-                : 'text-white/30 hover:text-white/60'
-            }`}
-          >
-            {TAB_ICONS[tab]}
-            <span className="hidden sm:inline">{TAB_LABELS[tab]}</span>
+                ? 'text-cyan-400 border-b-2 border-cyan-400'
+                : 'text-white/25 hover:text-white/50'
+            }`}>
+            {TAB_META[tab].icon}
+            <span>{TAB_META[tab].label}</span>
           </button>
         ))}
       </div>
-
-      {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3">
-        {activeTab === 'search' && (
-          <SearchPanel onAddSong={addToPlaylist} onPlayNow={handleSelectSong} playlist={playlist} youtubeApiKey={YOUTUBE_API_KEY} isOwner={isOwner} />
-        )}
-        {activeTab === 'playlist' && (
-          <Playlist playlist={playlist} currentSong={currentSong} onSelect={handleSelectSong} onRemove={removeFromPlaylist} isOwner={isOwner} />
-        )}
-        {activeTab === 'participants' && (
-          <ParticipantsPanel participants={participants} ownerUserId={roomData?.ownerUserId} currentUserId={userId} />
-        )}
-        {activeTab === 'chat' && (
-          <ChatPanel messages={messages} onSend={sendMessage} currentUserId={userId} />
-        )}
+        {activeTab === 'search'       && <SearchPanel onAddSong={addToPlaylist} onPlayNow={handleSelectSong} playlist={playlist} youtubeApiKey={YOUTUBE_API_KEY} isOwner={isOwner} />}
+        {activeTab === 'playlist'     && <Playlist playlist={playlist} currentSong={currentSong} onSelect={handleSelectSong} onRemove={removeFromPlaylist} isOwner={isOwner} />}
+        {activeTab === 'participants' && <ParticipantsPanel participants={participants} ownerUserId={roomData?.ownerUserId} currentUserId={userId} />}
+        {activeTab === 'chat'         && <ChatPanel messages={messages} onSend={sendMessage} currentUserId={userId} />}
       </div>
     </>
   );
 
   return (
-    <div className="h-[100dvh] bg-[#0a0a0a] flex flex-col overflow-hidden">
+    <div className="h-[100dvh] bg-[#080b14] flex flex-col overflow-hidden">
 
-      {/* ── Top Bar ── */}
-      <header className="shrink-0 flex items-center justify-between px-3 sm:px-4 py-2.5 bg-[#111] border-b border-white/5">
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center shrink-0">
-            <Music size={13} />
+      {/* Ambient glow */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute top-[-30%] right-[-10%] w-[500px] h-[500px] rounded-full bg-indigo-600/5 blur-[120px]" />
+        <div className="absolute bottom-[10%] left-[-10%] w-[400px] h-[400px] rounded-full bg-cyan-500/5 blur-[100px]" />
+      </div>
+
+      {/* ── Top bar ── */}
+      <header className="relative shrink-0 flex items-center justify-between px-4 py-3 border-b border-white/5 bg-[#080b14]/80 backdrop-blur-xl">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-8 h-8 rounded-xl gradient-btn flex items-center justify-center shrink-0 shadow-lg">
+            <Music2 size={14} />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
-              <span className="font-semibold text-sm truncate max-w-[120px] sm:max-w-none">
+              <span className="font-bold text-sm truncate max-w-[130px] sm:max-w-xs">
                 {roomData?.roomName || roomCode}
               </span>
-              {isOwner && <Crown size={11} className="text-yellow-400 shrink-0" />}
+              {isOwner && <Crown size={11} className="text-amber-400 shrink-0" />}
             </div>
-            <div className="flex items-center gap-1 text-xs text-white/30">
-              <span className="font-mono">{roomCode}</span>
+            <div className="flex items-center gap-1.5 text-[10px] text-white/25 mt-0.5">
+              <span className="font-mono tracking-wider">{roomCode}</span>
               <span>·</span>
-              <span>{participants.length} listener{participants.length !== 1 ? 's' : ''}</span>
+              <span className="flex items-center gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                {participants.length} listening
+              </span>
             </div>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            onClick={copyInvite}
-            className="flex items-center gap-1 px-2.5 py-1.5 glass rounded-lg text-xs hover:border-purple-500/50 transition-colors"
-          >
-            {copied ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
-            <span className="hidden sm:inline">{copied ? 'Copied' : 'Invite'}</span>
+          <button onClick={copyInvite}
+            className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-xl text-xs hover:bg-white/8 transition-all">
+            {copied ? <Check size={11} className="text-emerald-400" /> : <Copy size={11} />}
+            <span className="hidden sm:inline">{copied ? 'Copied!' : 'Invite'}</span>
           </button>
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-1 px-2.5 py-1.5 glass rounded-lg text-xs hover:border-red-500/50 hover:text-red-400 transition-colors"
-          >
-            <LogOut size={12} />
+          <button onClick={() => navigate('/')}
+            className="flex items-center gap-1.5 px-3 py-1.5 glass rounded-xl text-xs hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20 transition-all">
+            <LogOut size={11} />
             <span className="hidden sm:inline">Leave</span>
           </button>
         </div>
       </header>
 
-      {/* ── DESKTOP layout: side-by-side ── */}
-      <div className="hidden md:flex flex-1 overflow-hidden">
-        {/* Album art area */}
-        <div className="flex-1 flex items-center justify-center p-6 relative overflow-hidden">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-96 h-96 rounded-full bg-purple-900/10 blur-[80px]" />
-          </div>
+      {/* ── Desktop: side-by-side ── */}
+      <div className="hidden md:flex flex-1 overflow-hidden relative">
+        {/* Album art */}
+        <div className="flex-1 flex flex-col items-center justify-center p-8 relative overflow-hidden">
           {currentSong ? (
-            <div className="relative text-center max-w-xs fade-in">
+            <div className="text-center fade-in max-w-sm w-full">
               <div className="relative inline-block">
-                <img
-                  src={currentSong.thumbnail}
-                  alt={currentSong.title}
-                  className="w-56 h-56 md:w-64 md:h-64 rounded-2xl object-cover glow-purple-lg shadow-2xl"
-                />
+                <img src={currentSong.thumbnail} alt={currentSong.title}
+                  className="w-64 h-64 rounded-3xl object-cover shadow-2xl glow-cyan-lg" />
                 {playbackState?.isPlaying && (
-                  <div className="absolute bottom-3 right-3 flex items-end gap-0.5 bg-black/60 rounded-lg px-2 py-1.5">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="w-0.5 bg-purple-400 rounded-full"
-                        style={{ height: `${8 + (i % 2 === 0 ? 6 : 10)}px`, animation: `pulse-purple 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }}
-                      />
+                  <div className="absolute bottom-3 right-3 flex items-end gap-0.5 bg-black/70 rounded-xl px-2.5 py-2 backdrop-blur-sm">
+                    {[0.5,1,0.6,0.9].map((h,i) => (
+                      <div key={i} className="eq-bar" style={{ animationDelay: `${i*0.15}s`, height: `${h*14}px` }} />
                     ))}
                   </div>
                 )}
               </div>
-              <h2 className="mt-4 text-lg font-bold leading-tight px-2">{currentSong.title}</h2>
-              <p className="text-sm text-white/40 mt-1">{currentSong.channelTitle}</p>
+              <h2 className="mt-6 text-xl font-bold leading-tight">{currentSong.title}</h2>
+              <p className="text-sm text-white/35 mt-1.5">{currentSong.channelTitle}</p>
+              {/* Participant avatars */}
+              {participants.length > 0 && (
+                <div className="flex items-center justify-center gap-1 mt-5">
+                  {participants.slice(0,5).map((p,i) => (
+                    <div key={p.id} className="w-7 h-7 rounded-full gradient-btn flex items-center justify-center text-xs font-bold border-2 border-[#080b14]"
+                      style={{ marginLeft: i > 0 ? '-6px': 0, zIndex: 5-i }}>
+                      {(p.username||'?')[0].toUpperCase()}
+                    </div>
+                  ))}
+                  {participants.length > 5 && <span className="text-xs text-white/25 ml-2">+{participants.length-5}</span>}
+                </div>
+              )}
             </div>
           ) : (
-            <div className="text-center text-white/20">
-              <div className="w-56 h-56 rounded-2xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-4">
-                <Music size={48} className="text-white/10" />
-                <p className="text-sm px-4">{isOwner ? 'Search and add songs to start' : 'Waiting for the owner…'}</p>
+            <div className="text-center text-white/15">
+              <div className="w-64 h-64 rounded-3xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-4 mx-auto">
+                <Music2 size={48} className="text-white/8" />
+                <p className="text-sm px-6">{isOwner ? 'Search and add songs to start' : 'Waiting for the host…'}</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Right sidebar */}
-        <div className="w-80 shrink-0 flex flex-col border-l border-white/5 bg-[#0e0e0e]">
+        {/* Sidebar */}
+        <div className="w-[320px] shrink-0 flex flex-col border-l border-white/5 bg-[#080b14]/60 backdrop-blur-xl">
           {SidebarContent}
         </div>
       </div>
 
-      {/* ── MOBILE layout: album art + bottom panel ── */}
+      {/* ── Mobile layout ── */}
       <div className="flex md:hidden flex-1 flex-col overflow-hidden relative">
-
-        {/* Album art — fills space above panel */}
-        <div
-          className="flex items-center justify-center relative overflow-hidden transition-all duration-300"
-          style={{ flex: panelOpen ? '0 0 auto' : '1 1 auto', paddingTop: panelOpen ? '1rem' : '2rem', paddingBottom: panelOpen ? '0.5rem' : '2rem' }}
-        >
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="w-64 h-64 rounded-full bg-purple-900/15 blur-[60px]" />
-          </div>
+        {/* Album art area */}
+        <div className="flex items-center justify-center py-4 px-6 relative"
+          style={{ flex: panelOpen ? '0 0 auto' : '1 1 auto' }}>
           {currentSong ? (
-            <div className="text-center fade-in px-4">
+            <div className="text-center fade-in">
               <div className="relative inline-block">
-                <img
-                  src={currentSong.thumbnail}
-                  alt={currentSong.title}
-                  className="w-36 h-36 rounded-2xl object-cover glow-purple-lg shadow-2xl"
-                />
+                <img src={currentSong.thumbnail} alt={currentSong.title}
+                  className="w-32 h-32 rounded-2xl object-cover shadow-2xl glow-cyan" />
                 {playbackState?.isPlaying && (
-                  <div className="absolute bottom-2 right-2 flex items-end gap-0.5 bg-black/60 rounded-md px-1.5 py-1">
-                    {[...Array(4)].map((_, i) => (
-                      <div key={i} className="w-0.5 bg-purple-400 rounded-full"
-                        style={{ height: `${6 + (i % 2 === 0 ? 4 : 8)}px`, animation: `pulse-purple 0.8s ease-in-out infinite`, animationDelay: `${i * 0.15}s` }}
-                      />
+                  <div className="absolute bottom-2 right-2 flex items-end gap-0.5 bg-black/70 rounded-lg px-1.5 py-1">
+                    {[0.5,1,0.6,0.9].map((h,i) => (
+                      <div key={i} className="eq-bar" style={{ animationDelay: `${i*0.15}s`, height: `${h*12}px` }} />
                     ))}
                   </div>
                 )}
               </div>
-              <h2 className="mt-3 text-base font-bold leading-tight px-2 line-clamp-1">{currentSong.title}</h2>
-              <p className="text-xs text-white/40 mt-0.5 truncate px-2">{currentSong.channelTitle}</p>
+              <h2 className="mt-3 text-sm font-bold line-clamp-1 px-2">{currentSong.title}</h2>
+              <p className="text-[11px] text-white/30 mt-0.5 truncate px-2">{currentSong.channelTitle}</p>
             </div>
           ) : (
-            <div className="text-center text-white/20 px-4">
-              <div className="w-32 h-32 rounded-2xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-2 mx-auto">
-                <Music size={32} className="text-white/10" />
-                <p className="text-xs px-2">{isOwner ? 'Search for songs' : 'Waiting…'}</p>
+            <div className="text-center text-white/15">
+              <div className="w-28 h-28 rounded-2xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-2 mx-auto">
+                <Music2 size={28} className="text-white/8" />
+                <p className="text-[10px] px-2">{isOwner ? 'Search songs' : 'Waiting…'}</p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Bottom slide-up panel */}
-        <div
-          className={`bg-[#0e0e0e] border-t border-white/5 flex flex-col transition-all duration-300 ${
-            panelOpen ? 'flex-1' : 'h-12'
-          }`}
-        >
-          {/* Panel handle / toggle */}
-          <button
-            onClick={() => setPanelOpen(o => !o)}
-            className="w-full flex items-center justify-center py-2 text-white/30 hover:text-white/60 transition-colors shrink-0"
-          >
-            <div className="w-8 h-1 bg-white/20 rounded-full" />
+        {/* Slide-up panel */}
+        <div className={`bg-[#0d1117] border-t border-white/5 flex flex-col transition-all duration-300 ${panelOpen ? 'flex-1' : 'h-10'}`}>
+          <button onClick={() => setPanelOpen(o => !o)}
+            className="w-full flex items-center justify-center py-2 shrink-0">
+            <div className="w-10 h-1 bg-white/15 rounded-full" />
           </button>
-
-          {panelOpen && (
-            <div className="flex flex-col flex-1 overflow-hidden">
-              {SidebarContent}
-            </div>
-          )}
+          {panelOpen && <div className="flex flex-col flex-1 overflow-hidden">{SidebarContent}</div>}
         </div>
       </div>
 
