@@ -1,9 +1,8 @@
 import { useState } from 'react';
-import { Search, Plus, Loader2, Music } from 'lucide-react';
+import { Search, Plus, Loader2, Music, Play } from 'lucide-react';
 
-// YouTube Data API v3 search
 async function searchYouTube(query, apiKey) {
-  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&videoCategoryId=10&maxResults=10&q=${encodeURIComponent(query)}&key=${apiKey}`;
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=10&q=${encodeURIComponent(query)}&key=${apiKey}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('Search failed');
   const data = await res.json();
@@ -15,7 +14,7 @@ async function searchYouTube(query, apiKey) {
   }));
 }
 
-export default function SearchPanel({ onAddSong, playlist, youtubeApiKey }) {
+export default function SearchPanel({ onAddSong, onPlayNow, playlist, youtubeApiKey, isOwner }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -36,11 +35,24 @@ export default function SearchPanel({ onAddSong, playlist, youtubeApiKey }) {
       const items = await searchYouTube(query.trim(), youtubeApiKey);
       setResults(items);
       if (!items.length) setError('No results found.');
-    } catch (err) {
+    } catch {
       setError('Search failed. Check your YouTube API key.');
     } finally {
       setLoading(false);
     }
+  }
+
+  // Click on thumbnail or title → add to queue + play immediately (owner only)
+  function handleClickSong(song) {
+    if (!isOwner) {
+      // Non-owners can only add to queue
+      onAddSong(song);
+      return;
+    }
+    // Add to queue if not already there
+    if (!inPlaylist.has(song.videoId)) onAddSong(song);
+    // Play immediately
+    onPlayNow && onPlayNow(song);
   }
 
   return (
@@ -82,17 +94,36 @@ export default function SearchPanel({ onAddSong, playlist, youtubeApiKey }) {
               key={song.videoId}
               className="flex items-center gap-3 p-2.5 rounded-xl bg-white/3 hover:bg-white/8 transition-colors group"
             >
-              <img
-                src={song.thumbnail}
-                alt={song.title}
-                className="w-12 h-9 rounded-lg object-cover shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium truncate leading-tight">{song.title}</p>
+              {/* Thumbnail — click to play */}
+              <div
+                onClick={() => handleClickSong(song)}
+                className="relative shrink-0 cursor-pointer"
+              >
+                <img
+                  src={song.thumbnail}
+                  alt={song.title}
+                  className="w-12 h-9 rounded-lg object-cover"
+                />
+                {/* Play overlay on hover */}
+                <div className="absolute inset-0 rounded-lg bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Play size={14} className="text-white fill-white" />
+                </div>
+              </div>
+
+              {/* Title — click to play */}
+              <div
+                className="flex-1 min-w-0 cursor-pointer"
+                onClick={() => handleClickSong(song)}
+              >
+                <p className="text-sm font-medium truncate leading-tight hover:text-purple-300 transition-colors">
+                  {song.title}
+                </p>
                 <p className="text-xs text-white/40 truncate">{song.channelTitle}</p>
               </div>
+
+              {/* + button — adds to queue only */}
               <button
-                onClick={() => onAddSong(song)}
+                onClick={(e) => { e.stopPropagation(); onAddSong(song); }}
                 disabled={added}
                 className={`shrink-0 w-7 h-7 rounded-full flex items-center justify-center transition-colors ${
                   added

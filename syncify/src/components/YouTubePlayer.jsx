@@ -10,24 +10,58 @@ export default function YouTubePlayer({
 }) {
   const [localProgress, setLocalProgress] = useState(0);
   const [localDuration, setLocalDuration] = useState(0);
-  const progressInterval = useRef(null);
-  const lastSyncRef = useRef(0);
-  const hiddenAtRef   = useRef(null);
-  const wasPlayingRef = useRef(false);
+  const progressInterval  = useRef(null);
+  const lastSyncRef       = useRef(0);
+  const isPlayingRef      = useRef(false); // tracks intended playing state
+  const resumingRef       = useRef(false); // true while we're mid-restore
+  const playStartRef      = useRef(null);  // { time, at } — wall clock when play started
   const playerContainerId = 'yt-player-container';
 
+  // ── Keep a ref to latest playbackState so visibility handler can read it ──
+  const playbackStateRef = useRef(playbackState);
+  useEffect(() => { playbackStateRef.current = playbackState; }, [playbackState]);
+  const currentSongRef = useRef(currentSong);
+  useEffect(() => { currentSongRef.current = currentSong; }, [currentSong]);
+
+  // ── Calculate the exact position the song should be at right now ──
+  function calcCurrentPosition(pb) {
+    if (!pb || !pb.isPlaying) return pb?.currentTime || 0;
+    const elapsed = (Date.now() - (pb.playStartedAt || pb.updatedAt || Date.now())) / 1000;
+    return (pb.currentTime || 0) + elapsed;
+  }
+
   const handleStateChange = useCallback((e) => {
+    // Track real intended state
+    if (e.data === YT_STATES.PLAYING) isPlayingRef.current = true;
+    if (e.data === YT_STATES.PAUSED)  isPlayingRef.current = false;
+    if (e.data === YT_STATES.ENDED)   isPlayingRef.current = false;
+
     if (!isOwner) return;
+
     if (e.data === YT_STATES.PLAYING) {
-      onPlaybackChange({ isPlaying: true, currentTime: e.target.getCurrentTime(), videoId: currentSong?.videoId });
+      const t = e.target.getCurrentTime();
+      playStartRef.current = { time: t, at: Date.now() };
+      onPlaybackChange({
+        isPlaying: true,
+        currentTime: t,
+        videoId: currentSongRef.current?.videoId,
+        playStartedAt: Date.now(),
+      });
     } else if (e.data === YT_STATES.PAUSED) {
+      // Ignore forced pauses from tab-hide or our own resume seeks
       if (document.visibilityState === 'hidden') return;
-      onPlaybackChange({ isPlaying: false, currentTime: e.target.getCurrentTime(), videoId: currentSong?.videoId });
+      if (resumingRef.current) return;
+      onPlaybackChange({
+        isPlaying: false,
+        currentTime: e.target.getCurrentTime(),
+        videoId: currentSongRef.current?.videoId,
+        playStartedAt: null,
+      });
     } else if (e.data === YT_STATES.ENDED) {
-      onPlaybackChange({ isPlaying: false, currentTime: 0, videoId: currentSong?.videoId });
+      onPlaybackChange({ isPlaying: false, currentTime: 0, videoId: currentSongRef.current?.videoId, playStartedAt: null });
       onEnded && onEnded();
     }
-  }, [isOwner, onPlaybackChange, onEnded, currentSong]);
+  }, [isOwner, onPlaybackChange, onEnded]);
 
   const { playerReady, loadVideo, play, pause, seekTo, getCurrentTime, getDuration, getPlayerState } =
     useYouTubePlayer({ containerId: playerContainerId, onStateChange: handleStateChange });
@@ -35,9 +69,7 @@ export default function YouTubePlayer({
   // ── Load + autoplay when owner selects a song ───────────────
   useEffect(() => {
     if (!playerReady || !currentSong?.videoId) return;
-    // If playback says playing, autoplay immediately
-    const shouldAutoPlay = playbackState?.isPlaying || isOwner;
-    loadVideo(currentSong.videoId, shouldAutoPlay);
+    loadVideo(currentSong.videoId, true);
   }, [currentSong?.videoId, playerReady]); // eslint-disable-line
 
   // ── Non-owner: sync from Firebase ────────────────────────────
@@ -47,21 +79,19 @@ export default function YouTubePlayer({
     if (now - lastSyncRef.current < 1000) return;
     lastSyncRef.current = now;
 
-    const remoteTime = playbackState.currentTime || 0;
-    const localTime  = getCurrentTime();
-    const drift      = Math.abs(remoteTime - localTime);
+    const targetTime = calcCurrentPosition(playbackState);
+    const drift = Math.abs(targetTime - getCurrentTime());
 
     if (playbackState.isPlaying) {
-      const adjustedTime = remoteTime + (now - playbackState.updatedAt) / 1000;
-      if (drift > 2) seekTo(adjustedTime);
+      if (drift > 2) seekTo(targetTime);
       if (getPlayerState() !== YT_STATES.PLAYING) play();
     } else {
-      if (drift > 0.5) seekTo(remoteTime);
+      if (drift > 0.5) seekTo(playbackState.currentTime);
       if (getPlayerState() === YT_STATES.PLAYING) pause();
     }
   }, [playbackState, playerReady, isOwner, play, pause, seekTo, getCurrentTime, getPlayerState]);
 
-  // ── Non-owner: load new video when owner changes song ────────
+  // ── Non-owner: load video when owner changes song ────────────
   useEffect(() => {
     if (!playerReady || !playbackState?.videoId || isOwner) return;
     if (currentSong?.videoId !== playbackState.videoId) {
@@ -69,33 +99,74 @@ export default function YouTubePlayer({
     }
   }, [playbackState?.videoId, playerReady, isOwner, currentSong?.videoId, loadVideo]);
 
-  // ── Page Visibility: resume after tab restore ────────────────
+  // ── Page Visibility: instant resume on tab restore ───────────
   useEffect(() => {
     if (!playerReady) return;
+
+    function onHide() {
+      // Nothing to do — we just let the browser pause it
+    }
+
+    function onShow() {
+      const pb = playbackStateRef.current;
+
+      // If the room is paused, nothing to restore
+      if (!pb?.isPlaying && !isPlayingRef.current) return;
+
+      resumingRef.current = true;
+
+      // Calculate where we should be right now
+      const targetTime = isOwner
+        ? getCurrentTime() + 0   // owner: we'll seek forward below
+        : calcCurrentPosition(pb);
+
+      // For the owner, calculate elapsed hidden time differently:
+      // We don't know exactly when hidden, so read current player position
+      // and just resume from there (browser paused at the right time)
+      const resumeTime = isOwner
+        ? getCurrentTime()   // resume from where browser paused
+        : targetTime;
+
+      // Small delay so browser finishes waking up the iframe
+      setTimeout(() => {
+        seekTo(resumeTime);
+        play();
+
+        if (isOwner) {
+          onPlaybackChange({
+            isPlaying: true,
+            currentTime: resumeTime,
+            videoId: currentSongRef.current?.videoId,
+            playStartedAt: Date.now() - resumeTime * 1000,
+          });
+        }
+
+        // Lift the resume guard after a moment
+        setTimeout(() => { resumingRef.current = false; }, 600);
+      }, 250);
+    }
+
     function handleVisibilityChange() {
       if (document.visibilityState === 'hidden') {
-        hiddenAtRef.current   = Date.now();
-        wasPlayingRef.current = getPlayerState() === YT_STATES.PLAYING;
+        onHide();
       } else {
-        if (!wasPlayingRef.current) return;
-        const hiddenMs = hiddenAtRef.current ? Date.now() - hiddenAtRef.current : 0;
-        if (isOwner) {
-          const resumeTime = getCurrentTime() + hiddenMs / 1000;
-          seekTo(resumeTime);
-          play();
-          onPlaybackChange({ isPlaying: true, currentTime: resumeTime, videoId: currentSong?.videoId });
-        } else {
-          if (!playbackState) return;
-          const elapsed = (Date.now() - playbackState.updatedAt) / 1000;
-          seekTo(playbackState.currentTime + elapsed);
-          if (playbackState.isPlaying) play();
-        }
-        hiddenAtRef.current = null;
+        onShow();
       }
     }
+
+    // Also handle window focus (covers minimise on desktop)
+    function handleFocus() {
+      if (document.visibilityState === 'visible') onShow();
+    }
+
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [playerReady, isOwner, play, seekTo, getCurrentTime, getPlayerState, currentSong, playbackState, onPlaybackChange]);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [playerReady, isOwner, play, seekTo, getCurrentTime, onPlaybackChange]);
 
   // ── Progress tick ─────────────────────────────────────────────
   useEffect(() => {
@@ -116,7 +187,12 @@ export default function YouTubePlayer({
     if (!isOwner) return;
     const newTime = (parseFloat(e.target.value) / 100) * localDuration;
     seekTo(newTime);
-    onPlaybackChange({ isPlaying: getPlayerState() === YT_STATES.PLAYING, currentTime: newTime, videoId: currentSong?.videoId });
+    onPlaybackChange({
+      isPlaying: getPlayerState() === YT_STATES.PLAYING,
+      currentTime: newTime,
+      videoId: currentSong?.videoId,
+      playStartedAt: getPlayerState() === YT_STATES.PLAYING ? Date.now() - newTime * 1000 : null,
+    });
   }
 
   const isPlaying   = getPlayerState() === YT_STATES.PLAYING;
@@ -124,23 +200,8 @@ export default function YouTubePlayer({
 
   return (
     <div className="bg-[#111] border-t border-white/5 shrink-0">
-
-      {/*
-        ── YouTube iframe: positioned off-screen so it stays in
-           layout (required for the API to initialize) but invisible.
-           position:fixed keeps it out of document flow entirely.
-      */}
-      <div
-        style={{
-          position: 'fixed',
-          top: '-9999px',
-          left: '-9999px',
-          width: '1px',
-          height: '1px',
-          pointerEvents: 'none',
-          opacity: 0,
-        }}
-      >
+      {/* YT iframe — off-screen but in layout so API initialises */}
+      <div style={{ position: 'fixed', top: '-9999px', left: '-9999px', width: '1px', height: '1px', pointerEvents: 'none', opacity: 0 }}>
         <div id={playerContainerId} style={{ width: '1px', height: '1px' }} />
       </div>
 
@@ -157,15 +218,12 @@ export default function YouTubePlayer({
           <span className="text-xs text-white/30 w-8 tabular-nums">{formatTime(localDuration)}</span>
         </div>
 
-        {/* Controls row */}
+        {/* Controls */}
         <div className="flex items-center justify-between gap-2">
-
-          {/* Song info */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
             {currentSong ? (
               <>
-                <img src={currentSong.thumbnail} alt={currentSong.title}
-                  className="w-9 h-9 rounded-lg object-cover shrink-0" />
+                <img src={currentSong.thumbnail} alt={currentSong.title} className="w-9 h-9 rounded-lg object-cover shrink-0" />
                 <div className="min-w-0 hidden sm:block">
                   <p className="text-sm font-medium truncate leading-tight">{currentSong.title}</p>
                   <p className="text-xs text-white/40 truncate">{currentSong.channelTitle}</p>
@@ -176,7 +234,6 @@ export default function YouTubePlayer({
             )}
           </div>
 
-          {/* Playback buttons */}
           <div className="flex items-center gap-3 shrink-0">
             <button onClick={() => onEnded && onEnded('prev')} disabled={!isOwner}
               className="text-white/40 hover:text-white disabled:opacity-30 transition-colors p-1">
@@ -192,7 +249,6 @@ export default function YouTubePlayer({
             </button>
           </div>
 
-          {/* Right hint */}
           <div className="flex-1 justify-end hidden sm:flex">
             {!isOwner && <span className="text-xs text-white/20 italic">Owner controls playback</span>}
           </div>

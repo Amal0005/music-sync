@@ -120,6 +120,9 @@ export function useRoom(roomCode, userId, username) {
     set(pbRef, {
       ...state,
       updatedAt: Date.now(),
+      // Store wall-clock time when play started so any client can
+      // calculate exact position after being hidden: pos = currentTime + (now - playStartedAt)/1000
+      playStartedAt: state.isPlaying ? Date.now() : null,
     });
   }, [roomCode]);
 

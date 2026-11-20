@@ -2,10 +2,11 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Music, Users, MessageSquare, ListMusic,
-  Copy, Check, LogOut, Crown, Loader2, ChevronDown, ChevronUp,
+  Copy, Check, LogOut, Crown, Loader2,
 } from 'lucide-react';
 import { useRoom } from '../hooks/useRoom';
 import { buildInviteLink } from '../utils/roomUtils';
+import { useSilentAudio } from '../hooks/useSilentAudio';
 import YouTubePlayer from '../components/YouTubePlayer';
 import SearchPanel from '../components/SearchPanel';
 import Playlist from '../components/Playlist';
@@ -39,6 +40,11 @@ export default function RoomPage() {
 
   const userId   = userInfo?.userId;
   const username = userInfo?.username;
+
+  // Keep a silent <audio> looping so the browser treats this tab as
+  // having active audio — prevents it from suspending the YouTube iframe
+  // when the window is minimised or the tab is switched.
+  useSilentAudio(!!userInfo);
 
   const {
     roomData, participants, playlist, messages,
@@ -145,7 +151,7 @@ export default function RoomPage() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3">
         {activeTab === 'search' && (
-          <SearchPanel onAddSong={addToPlaylist} playlist={playlist} youtubeApiKey={YOUTUBE_API_KEY} />
+          <SearchPanel onAddSong={addToPlaylist} onPlayNow={handleSelectSong} playlist={playlist} youtubeApiKey={YOUTUBE_API_KEY} isOwner={isOwner} />
         )}
         {activeTab === 'playlist' && (
           <Playlist playlist={playlist} currentSong={currentSong} onSelect={handleSelectSong} onRemove={removeFromPlaylist} isOwner={isOwner} />
