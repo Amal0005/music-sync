@@ -1,0 +1,37 @@
+{
+  "rules": {
+    "rooms": {
+      "$roomCode": {
+        "meta": {
+          ".read": "auth != null",
+          ".write": "auth != null && (
+            !data.exists() ||
+            data.child('ownerUserId').val() === auth.uid
+          )"
+        },
+        "participants": {
+          ".read": "auth != null",
+          "$userId": {
+            ".read": "auth != null",
+            ".write": "auth != null && auth.uid === $userId"
+          }
+        },
+        "playlist": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        },
+        "playback": {
+          ".read": "auth != null",
+          ".write": "auth != null && (
+            !root.child('rooms').child($roomCode).child('meta').exists() ||
+            root.child('rooms').child($roomCode).child('meta').child('ownerUserId').val() === auth.uid
+          )"
+        },
+        "chat": {
+          ".read": "auth != null",
+          ".write": "auth != null"
+        }
+      }
+    }
+  }
+}
