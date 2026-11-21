@@ -15,7 +15,7 @@ export default function HomePage() {
       </div>
 
       {/* ── Nav ── */}
-      <nav className="relative flex items-center justify-between px-6 md:px-10 py-5">
+      <nav className="relative flex items-center justify-between px-4 md:px-10 py-4">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl gradient-btn flex items-center justify-center shadow-lg">
             <Music2 size={17} className="text-white" />
@@ -24,12 +24,12 @@ export default function HomePage() {
         </div>
         <div className="flex gap-2">
           <button onClick={() => navigate('/join')}
-            className="px-4 py-2 rounded-xl glass text-sm font-medium hover:bg-white/8 transition-all">
-            Join Room
+            className="px-3 py-1.5 rounded-xl glass text-xs font-medium hover:bg-white/8 transition-all">
+            Join
           </button>
           <button onClick={() => navigate('/create')}
-            className="px-4 py-2 rounded-xl gradient-btn text-sm font-semibold transition-all hover:opacity-90 shadow-lg">
-            Create Room
+            className="px-3 py-1.5 rounded-xl gradient-btn text-xs font-semibold transition-all hover:opacity-90 shadow-lg">
+            Create
           </button>
         </div>
       </nav>
@@ -42,7 +42,7 @@ export default function HomePage() {
             Real-time music sync · No account required
           </div>
 
-          <h1 className="text-5xl md:text-7xl font-black tracking-tight mb-6 leading-[1.05]">
+          <h1 className="text-4xl md:text-7xl font-black tracking-tight mb-6 leading-[1.05]">
             Music is better<br />
             <span className="shimmer-text">together.</span>
           </h1>
@@ -52,14 +52,14 @@ export default function HomePage() {
             in perfect sync — no matter where your friends are.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex flex-row gap-3 justify-center flex-wrap">
             <button onClick={() => navigate('/create')}
-              className="group flex items-center justify-center gap-2 px-8 py-4 gradient-btn rounded-2xl font-semibold text-base transition-all hover:opacity-90 hover:scale-[1.02] shadow-xl shadow-cyan-500/20">
+              className="group flex items-center justify-center gap-2 px-6 py-3 gradient-btn rounded-2xl font-semibold text-sm transition-all hover:opacity-90 hover:scale-[1.02] shadow-xl shadow-cyan-500/20">
               Start a Room
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+              <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
             </button>
             <button onClick={() => navigate('/join')}
-              className="flex items-center justify-center gap-2 px-8 py-4 glass rounded-2xl font-semibold text-base hover:bg-white/8 transition-all hover:scale-[1.02]">
+              className="flex items-center justify-center gap-2 px-6 py-3 glass rounded-2xl font-semibold text-sm hover:bg-white/8 transition-all hover:scale-[1.02]">
               Join with Code
             </button>
           </div>
@@ -140,9 +140,9 @@ export default function HomePage() {
           <h2 className="text-3xl font-bold mb-3">Ready to jam?</h2>
           <p className="text-white/40 text-sm mb-8">Create a room in under 10 seconds.</p>
           <button onClick={() => navigate('/create')}
-            className="group flex items-center justify-center gap-2 px-8 py-4 gradient-btn rounded-2xl font-semibold w-full hover:opacity-90 transition-all">
+            className="group inline-flex items-center justify-center gap-2 px-6 py-3 gradient-btn rounded-2xl font-semibold hover:opacity-90 transition-all">
             Create a Free Room
-            <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
+            <ArrowRight size={15} className="group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
       </section>
