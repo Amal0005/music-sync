@@ -12,6 +12,8 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
   const lastSyncRef       = useRef(0);
   const isPlayingRef      = useRef(false);
   const resumingRef       = useRef(false);
+  // Only true for a brief window after the user explicitly clicks play/pause
+  const userClickedRef    = useRef(false);
   const playbackStateRef  = useRef(playbackState);
   const currentSongRef    = useRef(currentSong);
   useEffect(() => { playbackStateRef.current = playbackState; }, [playbackState]);
@@ -28,12 +30,18 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
     if (e.data === YT_STATES.PLAYING)  isPlayingRef.current = true;
     if (e.data === YT_STATES.PAUSED)   isPlayingRef.current = false;
     if (e.data === YT_STATES.ENDED)    isPlayingRef.current = false;
+
     if (e.data === YT_STATES.PLAYING) {
+      // Always safe to broadcast play — it only starts/resumes music for everyone
       const t = e.target.getCurrentTime();
       onPlaybackChange({ isPlaying: true, currentTime: t, videoId: currentSongRef.current?.videoId, playStartedAt: Date.now() });
     } else if (e.data === YT_STATES.PAUSED) {
-      if (document.visibilityState === 'hidden') return;
+      // Only broadcast pause if the user explicitly clicked the button.
+      // Browser-triggered pauses (tab hide, phone lock, etc.) are ignored —
+      // the sync effect will re-play locally without touching Firebase.
+      if (!userClickedRef.current) return;
       if (resumingRef.current) return;
+      userClickedRef.current = false;
       onPlaybackChange({ isPlaying: false, currentTime: e.target.getCurrentTime(), videoId: currentSongRef.current?.videoId, playStartedAt: null });
     } else if (e.data === YT_STATES.ENDED) {
       onPlaybackChange({ isPlaying: false, currentTime: 0, videoId: currentSongRef.current?.videoId, playStartedAt: null });
@@ -102,7 +110,13 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
 
   function handlePlayPause() {
     if (!currentSong) return;
-    getPlayerState() === YT_STATES.PLAYING ? pause() : play();
+    if (getPlayerState() === YT_STATES.PLAYING) {
+      // Mark as intentional before calling pause so handleStateChange allows it
+      userClickedRef.current = true;
+      pause();
+    } else {
+      play();
+    }
   }
 
   function handleSeek(e) {
