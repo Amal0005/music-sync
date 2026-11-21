@@ -16,10 +16,11 @@ export default function Playlist({ playlist, currentSong, onSelect, onRemove, is
       {playlist.map((song, index) => {
         const isCurrent = song.videoId === currentSong?.videoId;
         return (
-          <div key={song.id} onClick={() => isOwner && onSelect(song)}
-            className={`group flex items-center gap-3 px-2.5 py-2 rounded-2xl transition-all ${
-              isCurrent ? 'bg-cyan-500/10 border border-cyan-500/20'
-              : isOwner ? 'hover:bg-white/4 cursor-pointer active:bg-white/8' : 'opacity-70'
+          <div key={song.id} onClick={() => onSelect(song)}
+            className={`group flex items-center gap-3 px-2.5 py-2 rounded-2xl transition-all cursor-pointer ${
+              isCurrent
+                ? 'bg-cyan-500/10 border border-cyan-500/20'
+                : 'hover:bg-white/4 active:bg-white/8'
             }`}>
 
             {/* Index / eq bars */}
@@ -45,12 +46,10 @@ export default function Playlist({ playlist, currentSong, onSelect, onRemove, is
               <p className="text-[10px] text-white/25 truncate">{song.addedBy}</p>
             </div>
 
-            {isOwner && (
-              <button onClick={e => { e.stopPropagation(); onRemove(song.id); }}
-                className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white/15 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100">
-                <Trash2 size={11} />
-              </button>
-            )}
+            <button onClick={e => { e.stopPropagation(); onRemove(song.id); }}
+              className="shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-white/15 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100">
+              <Trash2 size={11} />
+            </button>
           </div>
         );
       })}

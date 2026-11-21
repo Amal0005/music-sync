@@ -39,7 +39,7 @@ export default function SearchPanel({ onAddSong, onPlayNow, playlist, youtubeApi
 
   function handleClickSong(song) {
     if (!inPlaylist.has(song.videoId)) onAddSong(song);
-    if (isOwner) onPlayNow && onPlayNow(song);
+    onPlayNow && onPlayNow(song);
   }
 
   return (

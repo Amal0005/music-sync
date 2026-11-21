@@ -42,44 +42,42 @@ export default function RoomPage() {
   const [panelOpen, setPanelOpen]     = useState(true);
 
   useEffect(() => {
-    if (isOwner || !playbackState?.videoId) return;
+    if (!playbackState?.videoId) return;
     const song = playlist.find(s => s.videoId === playbackState.videoId);
     if (song) setCurrentSong(song);
-  }, [playbackState?.videoId, playlist, isOwner]);
+  }, [playbackState?.videoId, playlist]);
 
   useEffect(() => {
     if (!userInfo) navigate(`/join?code=${roomCode}`);
   }, [userInfo, navigate, roomCode]);
 
   const handlePlaybackChange = useCallback((state) => {
-    if (!isOwner) return;
     updatePlayback(state);
-  }, [isOwner, updatePlayback]);
+  }, [updatePlayback]);
 
   const handleSelectSong = useCallback((song) => {
-    if (!isOwner) return;
     setCurrentSong(song);
     updatePlayback({ videoId: song.videoId, isPlaying: true, currentTime: 0, playStartedAt: Date.now() });
-  }, [isOwner, updatePlayback]);
+  }, [updatePlayback]);
 
   const handleEnded = useCallback((direction = 'next') => {
-    if (!isOwner || !playlist.length || !currentSong) return;
+    if (!playlist.length || !currentSong) return;
     const idx = playlist.findIndex(s => s.videoId === currentSong.videoId);
     const nextIdx = direction === 'prev'
       ? (idx <= 0 ? playlist.length - 1 : idx - 1)
       : (idx >= playlist.length - 1 ? 0 : idx + 1);
     const next = playlist[nextIdx];
     if (next) handleSelectSong(next);
-  }, [isOwner, playlist, currentSong, handleSelectSong]);
+  }, [playlist, currentSong, handleSelectSong]);
 
   const autoPlayedRef = useRef(false);
   useEffect(() => {
-    if (isOwner && playlist.length > 0 && !currentSong && !autoPlayedRef.current) {
+    if (playlist.length > 0 && !currentSong && !autoPlayedRef.current) {
       autoPlayedRef.current = true;
       setCurrentSong(playlist[0]);
       updatePlayback({ videoId: playlist[0].videoId, isPlaying: false, currentTime: 0 });
     }
-  }, [isOwner, playlist, currentSong, updatePlayback]);
+  }, [playlist, currentSong, updatePlayback]);
 
   function copyInvite() {
     navigator.clipboard.writeText(buildInviteLink(roomCode));
@@ -212,7 +210,7 @@ export default function RoomPage() {
             <div className="text-center text-white/15">
               <div className="w-64 h-64 rounded-3xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-4 mx-auto">
                 <Music2 size={48} className="text-white/8" />
-                <p className="text-sm px-6">{isOwner ? 'Search and add songs to start' : 'Waiting for the host…'}</p>
+                <p className="text-sm px-6">Search and add songs to start</p>
               </div>
             </div>
           )}
@@ -249,7 +247,7 @@ export default function RoomPage() {
             <div className="text-center text-white/15">
               <div className="w-28 h-28 rounded-2xl bg-white/3 border border-white/5 flex flex-col items-center justify-center gap-2 mx-auto">
                 <Music2 size={28} className="text-white/8" />
-                <p className="text-[10px] px-2">{isOwner ? 'Search songs' : 'Waiting…'}</p>
+                <p className="text-[10px] px-2">Search songs</p>
               </div>
             </div>
           )}

@@ -28,7 +28,6 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
     if (e.data === YT_STATES.PLAYING)  isPlayingRef.current = true;
     if (e.data === YT_STATES.PAUSED)   isPlayingRef.current = false;
     if (e.data === YT_STATES.ENDED)    isPlayingRef.current = false;
-    if (!isOwner) return;
     if (e.data === YT_STATES.PLAYING) {
       const t = e.target.getCurrentTime();
       onPlaybackChange({ isPlaying: true, currentTime: t, videoId: currentSongRef.current?.videoId, playStartedAt: Date.now() });
@@ -40,7 +39,7 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
       onPlaybackChange({ isPlaying: false, currentTime: 0, videoId: currentSongRef.current?.videoId, playStartedAt: null });
       onEnded && onEnded();
     }
-  }, [isOwner, onPlaybackChange, onEnded]);
+  }, [onPlaybackChange, onEnded]);
 
   const { playerReady, loadVideo, play, pause, seekTo, getCurrentTime, getDuration, getPlayerState } =
     useYouTubePlayer({ containerId: playerContainerId, onStateChange: handleStateChange });
@@ -50,8 +49,9 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
     loadVideo(currentSong.videoId, true);
   }, [currentSong?.videoId, playerReady]); // eslint-disable-line
 
+  // Sync all clients to Firebase playback state
   useEffect(() => {
-    if (!playerReady || !playbackState || isOwner) return;
+    if (!playerReady || !playbackState) return;
     const now = Date.now();
     if (now - lastSyncRef.current < 1000) return;
     lastSyncRef.current = now;
@@ -64,13 +64,13 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
       if (drift > 0.5) seekTo(playbackState.currentTime);
       if (getPlayerState() === YT_STATES.PLAYING) pause();
     }
-  }, [playbackState, playerReady, isOwner, play, pause, seekTo, getCurrentTime, getPlayerState]);
+  }, [playbackState, playerReady, play, pause, seekTo, getCurrentTime, getPlayerState]);
 
   useEffect(() => {
-    if (!playerReady || !playbackState?.videoId || isOwner) return;
+    if (!playerReady || !playbackState?.videoId) return;
     if (currentSong?.videoId !== playbackState.videoId)
       loadVideo(playbackState.videoId, playbackState.isPlaying);
-  }, [playbackState?.videoId, playerReady, isOwner, currentSong?.videoId, loadVideo]);
+  }, [playbackState?.videoId, playerReady, currentSong?.videoId, loadVideo]);
 
   useEffect(() => {
     if (!playerReady) return;
@@ -79,9 +79,9 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
       resumingRef.current = true;
       setTimeout(() => {
         const pb = playbackStateRef.current;
-        const resumeTime = isOwner ? getCurrentTime() : calcCurrentPosition(pb);
+        const resumeTime = calcCurrentPosition(pb);
         seekTo(resumeTime); play();
-        if (isOwner) onPlaybackChange({ isPlaying: true, currentTime: resumeTime, videoId: currentSongRef.current?.videoId, playStartedAt: Date.now() - resumeTime * 1000 });
+        onPlaybackChange({ isPlaying: true, currentTime: resumeTime, videoId: currentSongRef.current?.videoId, playStartedAt: Date.now() - resumeTime * 1000 });
         setTimeout(() => { resumingRef.current = false; }, 600);
       }, 250);
     }
@@ -89,7 +89,7 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
     document.addEventListener('visibilitychange', onVis);
     window.addEventListener('focus', onShow);
     return () => { document.removeEventListener('visibilitychange', onVis); window.removeEventListener('focus', onShow); };
-  }, [playerReady, isOwner, play, seekTo, getCurrentTime, onPlaybackChange]);
+  }, [playerReady, play, seekTo, onPlaybackChange]);
 
   useEffect(() => {
     progressInterval.current = setInterval(() => {
@@ -101,12 +101,11 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
   }, [playerReady, getCurrentTime, getDuration]);
 
   function handlePlayPause() {
-    if (!isOwner) return;
+    if (!currentSong) return;
     getPlayerState() === YT_STATES.PLAYING ? pause() : play();
   }
 
   function handleSeek(e) {
-    if (!isOwner) return;
     const newTime = (parseFloat(e.target.value) / 100) * localDuration;
     seekTo(newTime);
     onPlaybackChange({ isPlaying: getPlayerState() === YT_STATES.PLAYING, currentTime: newTime, videoId: currentSong?.videoId, playStartedAt: getPlayerState() === YT_STATES.PLAYING ? Date.now() - newTime * 1000 : null });
@@ -116,14 +115,18 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
   const progressPct = localDuration > 0 ? (localProgress / localDuration) * 100 : 0;
 
   return (
-    <div className="bg-[#0d1117] border-t border-white/5 shrink-0">
-      {/* Visible mini video — prevents browser from suspending the iframe */}
-      <div style={{ position: 'fixed', bottom: '90px', left: '8px', width: '160px', height: '90px',
-        borderRadius: '12px', overflow: 'hidden', zIndex: 50,
-        boxShadow: '0 4px 24px rgba(0,0,0,0.6)', border: '1px solid rgba(34,211,238,0.2)',
-        pointerEvents: 'none' }}>
+    <div className="bg-[#0d1117] border-t border-white/5 shrink-0 relative">
+      {/* iframe lives inside the player bar — always on-screen so browsers never throttle it.
+          Clipped to 1×1 px visually but fully rendered at 160×90 internally. */}
+      <div style={{
+        position: 'absolute', bottom: 0, right: 0,
+        width: '1px', height: '1px',
+        overflow: 'hidden', pointerEvents: 'none',
+      }}>
         <div id={playerContainerId} style={{ width: '160px', height: '90px' }} />
       </div>
+      {/* Silent looping audio — keeps the audio session alive on mobile Safari */}
+      <audio src="/silence.mp3" loop autoPlay muted={false} style={{ display: 'none' }} />
 
       <div className="px-4 pt-2.5 pb-4 max-w-screen-xl mx-auto">
         {/* Progress bar */}
@@ -131,8 +134,8 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
           <span className="text-[10px] text-white/25 w-8 text-right tabular-nums">{formatTime(localProgress)}</span>
           <div className="relative flex-1 h-1 group">
             <input type="range" min={0} max={100} step={0.1} value={progressPct}
-              onChange={handleSeek} disabled={!isOwner}
-              className={`absolute inset-0 w-full h-full opacity-0 ${isOwner ? 'cursor-pointer' : 'cursor-default'}`} />
+              onChange={handleSeek}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
             <div className="h-full rounded-full bg-white/8">
               <div className="h-full rounded-full transition-all"
                 style={{ width: `${progressPct}%`, background: 'linear-gradient(90deg,#22d3ee,#818cf8)' }} />
@@ -161,23 +164,21 @@ export default function YouTubePlayer({ currentSong, playbackState, isOwner, onP
 
           {/* Buttons */}
           <div className="flex items-center gap-3 shrink-0">
-            <button onClick={() => onEnded && onEnded('prev')} disabled={!isOwner}
-              className="p-2 text-white/30 hover:text-white disabled:opacity-20 transition-all hover:bg-white/5 rounded-xl">
+            <button onClick={() => onEnded && onEnded('prev')}
+              className="p-2 text-white/30 hover:text-white transition-all hover:bg-white/5 rounded-xl">
               <SkipBack size={18} />
             </button>
-            <button onClick={handlePlayPause} disabled={!isOwner || !currentSong}
+            <button onClick={handlePlayPause} disabled={!currentSong}
               className="w-11 h-11 rounded-2xl gradient-btn disabled:opacity-30 flex items-center justify-center transition-all hover:opacity-90 shadow-lg shadow-cyan-500/20 shrink-0">
               {isPlaying ? <Pause size={18} /> : <Play size={18} />}
             </button>
-            <button onClick={() => onEnded && onEnded('next')} disabled={!isOwner}
-              className="p-2 text-white/30 hover:text-white disabled:opacity-20 transition-all hover:bg-white/5 rounded-xl">
+            <button onClick={() => onEnded && onEnded('next')}
+              className="p-2 text-white/30 hover:text-white transition-all hover:bg-white/5 rounded-xl">
               <SkipForward size={18} />
             </button>
           </div>
 
-          <div className="flex-1 justify-end hidden sm:flex">
-            {!isOwner && <span className="text-[10px] text-white/15 italic">Host controls playback</span>}
-          </div>
+          <div className="flex-1" />
         </div>
       </div>
     </div>
